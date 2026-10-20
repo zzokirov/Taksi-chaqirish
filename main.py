@@ -44,8 +44,17 @@ async def main():
     logger.info("Bot is starting...")
     asyncio.create_task(start_web_server())
     
+    if not settings.BOT_TOKEN:
+        logger.error("XATOLIK: BOT_TOKEN o'rnatilmagan! Render Dashboard -> Environment bo'limida BOT_TOKEN ni kiriting.")
+        return
+    
     # Initialize DB
-    await create_db()
+    logger.info(f"Connecting to database: {settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else 'local'}")
+    try:
+        await create_db()
+    except Exception as e:
+        logger.error(f"XATOLIK: Ma'lumotlar bazasiga ulanib bo'lmadi! DATABASE_URL sozlamasini tekshiring: {e}")
+        raise
     
     # Auto-seed districts if empty
     try:
