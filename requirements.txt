@@ -1,6 +1,7 @@
 aiogram>=3.4.1
 aiohttp>=3.9.0
-SQLAlchemy>=2.0.29
+SQLAlchemy[asyncio]>=2.0.29
+greenlet>=3.0.3
 asyncpg>=0.29.0
 python-dotenv>=1.0.1
 alembic>=1.13.1
