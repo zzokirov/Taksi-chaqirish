@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: taxi_bot
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - taxi_network
+
+  db:
+    image: postgres:15-alpine
+    container_name: taxi_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_DB: taxi_bot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - taxi_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d taxi_bot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  taxi_network:
+    driver: bridge
+
+volumes:
+  postgres_data:

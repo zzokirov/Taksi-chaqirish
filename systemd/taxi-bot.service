@@ -1,0 +1,15 @@
+[Unit]
+Description=Farg'ona Taxi Telegram Bot
+After=network.target
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=/opt/taxi-bot
+Environment="PATH=/opt/taxi-bot/venv/bin"
+ExecStart=/opt/taxi-bot/venv/bin/python main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
