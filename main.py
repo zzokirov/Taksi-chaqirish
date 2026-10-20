@@ -56,20 +56,18 @@ async def main():
         logger.error(f"XATOLIK: Ma'lumotlar bazasiga ulanib bo'lmadi! DATABASE_URL sozlamasini tekshiring: {e}")
         raise
     
-    # Auto-seed districts if empty
+    # Auto-seed districts, groups and settings if empty
     try:
         from bot.database.database import async_session_maker
-        from bot.services.admin_service import AdminService
-        from seed_districts import fergana_districts, tashkent_districts
+        from seed_districts import seed_districts_data, seed_groups_data, seed_settings_data
         async with async_session_maker() as session:
-            existing = await AdminService.get_all_districts(session)
-            if not existing:
-                for d in fergana_districts + tashkent_districts:
-                    await AdminService.add_district(session, d)
-                await session.commit()
-                logger.info("Districts seeded successfully on first start.")
+            await seed_districts_data(session)
+            g_added = await seed_groups_data(session)
+            await seed_settings_data(session)
+            if g_added > 0:
+                logger.info(f"Yangi bazaga {g_added} ta guruh va sozlamalar muvaffaqiyatli yuklandi.")
     except Exception as e:
-        logger.warning(f"Error auto-seeding districts: {e}")
+        logger.warning(f"Error auto-seeding initial data: {e}")
     
     # Initialize bot and dispatcher
     bot = Bot(token=settings.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
