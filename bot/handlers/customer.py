@@ -3,7 +3,10 @@ import logging
 from aiogram import Router, F, types, Bot
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from bot.database.models import DriverGroup
 
 from bot.states.customer_states import CustomerOrderState
 from bot.keyboards.customer_kb import (
@@ -231,30 +234,69 @@ async def confirm_order(callback: types.CallbackQuery, state: FSMContext, sessio
         f"🕐 Vaqt: {datetime.datetime.utcnow().strftime('%H:%M')}"
     )
     
+    import html
+    from_addr = html.escape(str(data.get('from_address', '')))
+    to_addr = html.escape(str(data.get('to_address', '')))
+    passengers = html.escape(str(data.get('passengers', '1')))
+    price = html.escape(str(data.get('price', 'Kelishiladi')))
+
+    order_text = (
+        "🚕 <b>YANGI BUYURTMA</b>\n\n"
+        f"🛣 <b>Yo'nalish:</b> {dir_text}\n"
+        f"📍 <b>Qayerdan:</b> {from_addr}\n"
+        f"🏁 <b>Qayerga:</b> {to_addr}\n"
+        f"👥 <b>Yo'lovchilar:</b> {passengers}\n"
+        f"💰 <b>Taklif qilingan narx:</b> {price}\n"
+        f"🕐 <b>Vaqt:</b> {datetime.datetime.utcnow().strftime('%H:%M')}"
+    )
+
     group = await DriverService.get_group_for_driver(session, fergana_id)
+    if not group or not group.telegram_group_id:
+        stmt = select(DriverGroup).where(DriverGroup.status == "ACTIVE", DriverGroup.telegram_group_id.isnot(None))
+        res = await session.execute(stmt)
+        group = res.scalars().first()
+
+    sent_to_group = False
     if group and group.telegram_group_id:
         try:
             sent_msg = await bot.send_message(
                 chat_id=group.telegram_group_id,
                 text=order_text,
-                parse_mode="Markdown",
+                parse_mode="HTML",
                 reply_markup=order_action_kb(order.id)
             )
             order.group_chat_id = group.telegram_group_id
             order.group_message_id = sent_msg.message_id
             await session.commit()
-            return
+            sent_to_group = True
         except Exception as e:
-            logger.error(f"Guruhga yuborishda xatolik: {e}")
-            
-    # Agar guruh ulanmagan bo'lsa yoki xato beraversa lchkaga yuboramiz (zaxira)
-    drivers = await DriverService.get_online_drivers_by_district(session, fergana_id)
-    if drivers:
-        for drv in drivers:
-            await safe_send_message(bot, drv.user.telegram_id, order_text, parse_mode="Markdown", reply_markup=order_action_kb(order.id))
-    else:
-        await safe_send_message(bot, callback.from_user.id, "Kechirasiz, ushbu hududda ayni vaqtda guruh yoki faol haydovchilar topilmadi.")
-        await OrderService.update_status(session, order.id, "CANCELLED")
+            logger.error(f"Guruhga ({group.telegram_group_id}) HTML formatda yuborishda xatolik: {e}")
+            try:
+                sent_msg = await bot.send_message(
+                    chat_id=group.telegram_group_id,
+                    text=order_text,
+                    parse_mode=None,
+                    reply_markup=order_action_kb(order.id)
+                )
+                order.group_chat_id = group.telegram_group_id
+                order.group_message_id = sent_msg.message_id
+                await session.commit()
+                sent_to_group = True
+            except Exception as e2:
+                logger.error(f"Guruhga oddiy matnda yuborishda ham xatolik: {e2}")
+
+    drivers = []
+    if fergana_id:
+        drivers = await DriverService.get_online_drivers_by_district(session, fergana_id)
+        if drivers:
+            for drv in drivers:
+                await safe_send_message(bot, drv.user.telegram_id, order_text, parse_mode="HTML", reply_markup=order_action_kb(order.id))
+
+    if sent_to_group or (drivers and len(drivers) > 0):
+        return
+
+    await safe_send_message(bot, callback.from_user.id, "Kechirasiz, ushbu hududda ayni vaqtda guruh yoki faol haydovchilar topilmadi.")
+    await OrderService.update_status(session, order.id, "CANCELLED")
 
 
 from bot.services.support_service import SupportService

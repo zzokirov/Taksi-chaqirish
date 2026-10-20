@@ -35,8 +35,10 @@ groups_mapping = [
     ('Buvayda tumani', 'Buvayda tumani', -1003992049806, 'https://t.me/+XMtha-unff9iODQ6'),
     ("Dang'ara tumani", "Dang'ara shafyorlari", -1004468913392, 'https://t.me/+Wyn3KWEnrHc5ZjI6'),
     ("Farg'ona tumani", 'Fargʻona tumani', -1004343609238, 'https://t.me/+u6kMUBoC-OoyZTAy'),
+    ("Furqat tumani", "Qo'qon shafyorlari", -1004306080296, 'https://t.me/+sTMjgQrralk3MGU6'),
     ("Qo'shtepa tumani", 'Qoʻshtepa tumani', -1003674485102, 'https://t.me/+K6EyLHBR1gE4NDYy'),
     ('Quva tumani', 'Quva tumani', -1004364212832, 'https://t.me/+5IGBrpkLShdmZjky'),
+    ("Rishton tumani", 'Oltariq shafyorlari', -1004304763844, 'https://t.me/+9WNaGHNRUZdjM2Ri'),
     ("So'x tumani", 'Soʻx tumani', -1003920235824, 'https://t.me/+YO6kl3GZyXk1N2Vi'),
     ('Toshloq tumani', 'Toshloq tumani', -1004305971230, 'https://t.me/+ZKRrG8Vx3rYwMjAy'),
     ("Uchko'prik tumani", 'Uchkoprik shafyorlari', -1004481291136, 'https://t.me/+q4Z5i67QMvw5MWYy'),
@@ -61,27 +63,39 @@ async def seed_districts_data(session):
 
 
 async def seed_groups_data(session):
-    existing = await session.execute(select(DriverGroup))
-    if existing.scalars().first():
-        return 0
-    
     all_districts = await AdminService.get_all_districts(session)
     district_map = {d.name: d.id for d in all_districts}
     
-    added = 0
+    added_or_updated = 0
     for dist_name, grp_name, grp_id, inv_link in groups_mapping:
         d_id = district_map.get(dist_name)
-        if d_id:
-            await AdminService.add_group(
-                session=session,
+        if not d_id:
+            continue
+            
+        stmt = select(DriverGroup).where(DriverGroup.district_id == d_id)
+        res = await session.execute(stmt)
+        group = res.scalar_one_or_none()
+        
+        if group:
+            if not group.telegram_group_id or group.status != "ACTIVE":
+                group.group_name = grp_name
+                group.telegram_group_id = grp_id
+                group.invite_link = inv_link
+                group.status = "ACTIVE"
+                added_or_updated += 1
+        else:
+            group = DriverGroup(
                 district_id=d_id,
                 group_name=grp_name,
                 telegram_group_id=grp_id,
-                invite_link=inv_link
+                invite_link=inv_link,
+                status="ACTIVE"
             )
-            added += 1
+            session.add(group)
+            added_or_updated += 1
+            
     await session.commit()
-    return added
+    return added_or_updated
 
 
 async def seed_settings_data(session):
